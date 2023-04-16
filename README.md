@@ -18,7 +18,11 @@ sept is heavily inspired by NestJS and the iDesign methodology for architecting 
 
 ### Roadmap
 
-- [ ] First-class serverless clients
+- [ ] route/controller/module level interceptors
+- [ ] route/client/module level guards
+- [ ] exception filters
+- [ ] route/controller/module/application level transformation/validation pipes
+- [ ] first-class serverless clients
 - [ ] compile modules as http-serverless application context
 - [ ] sept-cli
   - [ ] sept new --options
