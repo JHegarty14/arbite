@@ -16,6 +16,18 @@ Rust, as a language, has seen a surge in popularity among developers for whom pe
 
 sept is heavily inspired by NestJS and the iDesign methodology for architecting software.
 
+### Roadmap
+
+- [ ] First-class serverless clients
+- [ ] compile modules as http-serverless application context
+- [ ] sept-cli
+  - [ ] sept new --options
+  - [ ] sept build
+
+### Architecture
+
+TODO
+
 ### License
 
 This project is licensed under the [MIT license](https://github.com/JHegarty14/arbite/blob/main/LICENSE).
