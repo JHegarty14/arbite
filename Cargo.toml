@@ -1,4 +1,2 @@
 [workspace]
-members = [
-    "arbite-core"
-]
+members = ["sept_core/lib/", "sept_core/codegen"]

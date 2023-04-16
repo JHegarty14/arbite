@@ -1,0 +1,17 @@
+[package]
+name = "sept_codegen"
+version = "0.1.0"
+edition = "2021"
+readme = "../../README.md"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+actix-rt = "^2.8"
+proc-macro2 = "1"
+quote = "1"
+syn = "1"
+
+[dev-dependencies]
+sept = { path = "../lib" }
