@@ -17,8 +17,10 @@ pub(crate) struct ApplicationContext {
 #[derive(Default)]
 pub struct Module {
     exports: HashSet<TypeId>,
+    tokens: HashSet<TypeId>,
     imports: Vec<Box<dyn FnOnce(&mut ResolvedModule, &mut ApplicationContext)>>,
     providers: Vec<Box<dyn FnOnce(&mut ResolvedModule, &mut ApplicationContext)>>,
+    provider_vals: Vec<Box<dyn FnOnce(&mut ResolvedModule, &mut ApplicationContext)>>,
     clients: Vec<Box<dyn FnOnce(&mut ResolvedModule, &mut ApplicationContext)>>,
 }
 
@@ -26,8 +28,10 @@ impl Module {
     pub fn new() -> Self {
         Self {
             exports: HashSet::new(),
+            tokens: HashSet::new(),
             imports: Vec::new(),
             providers: Vec::new(),
+            provider_vals: Vec::new(),
             clients: Vec::new(),
         }
     }
@@ -35,8 +39,10 @@ impl Module {
     pub fn import<T: ModuleFactory + 'static>(mut self) -> Self {
         self.imports.push(Box::new(|module, ctx| {
             if let Some(resolved) = ctx.modules.get(&TypeId::of::<T>()) {
+                println!("Resolved");
                 module.imports.push(resolved.clone());
             } else {
+                println!("Building module");
                 let new_module = Arc::new(T::get_module().build(ctx));
                 ctx.modules.insert(TypeId::of::<T>(), new_module.clone());
                 module.imports.push(new_module);
@@ -70,7 +76,20 @@ impl Module {
             for module in &module.imports {
                 graphs.push(&module.graphed_exports);
             }
+            module.graph.resolve::<Arc<T>>(&graphs);
         }));
+        self.tokens.insert(TypeId::of::<T>());
+        self
+    }
+
+    pub fn provide_val<T: Sync + Send + Clone>(mut self, t: T) -> Self
+    where
+        T: 'static,
+    {
+        self.provider_vals.push(Box::new(|module, _| {
+            module.graph.provide(Arc::new(t));
+        }));
+        self.tokens.insert(TypeId::of::<T>());
         self
     }
 
@@ -86,20 +105,33 @@ impl Module {
             let resolved = T::resolve(&mut module.graph, &graphs);
             module.clients.push(Arc::new(resolved));
         }));
+        self.tokens.insert(TypeId::of::<T>());
         self
     }
 
     pub(crate) fn build(self, ctx: &mut ApplicationContext) -> ResolvedModule {
         let mut module = ResolvedModule::new();
+
         for import in self.imports {
+            println!("Importing");
             import(&mut module, ctx);
         }
+
+        for provided_val in self.provider_vals {
+            println!("Providing val");
+            provided_val(&mut module, ctx);
+        }
+
         for provider in self.providers {
+            println!("Providing");
             provider(&mut module, ctx);
         }
+
         for client in self.clients {
             client(&mut module, ctx);
         }
+
+        println!("Graph: {:?}", module.graph);
         module.graphed_exports = module.graph.filter_by(self.exports);
         module
     }
@@ -125,5 +157,60 @@ impl ResolvedModule {
             graphed_exports: Graph::new(),
             clients: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate as sept;
+    use crate::sept_module::{Module, ServiceConfig, ServiceFactory};
+    use crate::Injectable;
+
+    fn get_empty_ctx() -> ApplicationContext {
+        ApplicationContext {
+            global_providers: Graph::new(),
+            modules: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn test_client_is_reachable() {
+        #[derive(Clone, Injectable)]
+        struct TestInjectable;
+
+        impl ServiceFactory for TestInjectable {
+            fn register(&self, _: &mut ServiceConfig) {}
+        }
+
+        let mut ctx = get_empty_ctx();
+        let resolved = Module::new().client::<TestInjectable>().build(&mut ctx);
+        assert_eq!(resolved.clients.len(), 1);
+    }
+
+    #[test]
+    fn test_imported_provider_is_reachable() {
+        #[derive(Clone, Injectable)]
+        struct TestInjectable;
+
+        struct ExportingModule;
+        impl ModuleFactory for ExportingModule {
+            fn get_module() -> Module {
+                Module::new()
+                    .export::<TestInjectable>()
+                    .provide::<TestInjectable>()
+            }
+        }
+
+        let mut ctx = get_empty_ctx();
+        let resolved = Module::new().import::<ExportingModule>().build(&mut ctx);
+        assert_eq!(resolved.imports.len(), 1);
+
+        println!("{:?}", resolved.imports[0].graph);
+
+        assert!(resolved.imports[0]
+            .graph
+            .get_node::<Arc<TestInjectable>>()
+            .is_some());
     }
 }
