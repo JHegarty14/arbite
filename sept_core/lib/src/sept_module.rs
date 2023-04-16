@@ -39,10 +39,8 @@ impl Module {
     pub fn import<T: ModuleFactory + 'static>(mut self) -> Self {
         self.imports.push(Box::new(|module, ctx| {
             if let Some(resolved) = ctx.modules.get(&TypeId::of::<T>()) {
-                println!("Resolved");
                 module.imports.push(resolved.clone());
             } else {
-                println!("Building module");
                 let new_module = Arc::new(T::get_module().build(ctx));
                 ctx.modules.insert(TypeId::of::<T>(), new_module.clone());
                 module.imports.push(new_module);
@@ -113,17 +111,14 @@ impl Module {
         let mut module = ResolvedModule::new();
 
         for import in self.imports {
-            println!("Importing");
             import(&mut module, ctx);
         }
 
         for provided_val in self.provider_vals {
-            println!("Providing val");
             provided_val(&mut module, ctx);
         }
 
         for provider in self.providers {
-            println!("Providing");
             provider(&mut module, ctx);
         }
 
@@ -131,7 +126,6 @@ impl Module {
             client(&mut module, ctx);
         }
 
-        println!("Graph: {:?}", module.graph);
         module.graphed_exports = module.graph.filter_by(self.exports);
         module
     }
@@ -205,8 +199,6 @@ mod tests {
         let mut ctx = get_empty_ctx();
         let resolved = Module::new().import::<ExportingModule>().build(&mut ctx);
         assert_eq!(resolved.imports.len(), 1);
-
-        println!("{:?}", resolved.imports[0].graph);
 
         assert!(resolved.imports[0]
             .graph
