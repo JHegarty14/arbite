@@ -9,7 +9,6 @@ pub(crate) struct Args {
 
 impl Args {
     pub(crate) fn new(args: AttributeArgs) -> syn::Result<Self> {
-        println!("Args::new({:?})", args);
         let mut path = None;
         let mut methods = Vec::new();
         let mut wrappers = Vec::new();
