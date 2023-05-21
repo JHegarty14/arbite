@@ -1,9 +1,9 @@
-use crate::graph::{Graph, Injected};
+use crate::di::{Graph, Injected};
 use actix_web::web::ServiceConfig;
-use std::sync::Arc;
 use std::{
     any::TypeId,
     collections::{HashMap, HashSet},
+    sync::Arc,
 };
 
 pub trait ServiceFactory: Send + Sync {
@@ -14,13 +14,13 @@ pub(crate) struct ApplicationContext {
     pub(crate) global_providers: Graph,
     pub(crate) modules: HashMap<TypeId, Arc<ResolvedModule>>,
 }
+
 #[derive(Default)]
 pub struct Module {
     exports: HashSet<TypeId>,
     tokens: HashSet<TypeId>,
     imports: Vec<Box<dyn FnOnce(&mut ResolvedModule, &mut ApplicationContext)>>,
     providers: Vec<Box<dyn FnOnce(&mut ResolvedModule, &mut ApplicationContext)>>,
-    provider_vals: Vec<Box<dyn FnOnce(&mut ResolvedModule, &mut ApplicationContext)>>,
     clients: Vec<Box<dyn FnOnce(&mut ResolvedModule, &mut ApplicationContext)>>,
 }
 
@@ -31,7 +31,6 @@ impl Module {
             tokens: HashSet::new(),
             imports: Vec::new(),
             providers: Vec::new(),
-            provider_vals: Vec::new(),
             clients: Vec::new(),
         }
     }
@@ -80,17 +79,6 @@ impl Module {
         self
     }
 
-    pub fn provide_val<T: Sync + Send + Clone>(mut self, t: T) -> Self
-    where
-        T: 'static,
-    {
-        self.provider_vals.push(Box::new(|module, _| {
-            module.graph.provide(Arc::new(t));
-        }));
-        self.tokens.insert(TypeId::of::<T>());
-        self
-    }
-
     pub fn client<T>(mut self) -> Self
     where
         T: Injected<Output = T> + ServiceFactory + 'static,
@@ -112,10 +100,6 @@ impl Module {
 
         for import in self.imports {
             import(&mut module, ctx);
-        }
-
-        for provided_val in self.provider_vals {
-            provided_val(&mut module, ctx);
         }
 
         for provider in self.providers {
@@ -168,7 +152,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn test_client_is_reachable() {
         #[derive(Clone, Injectable)]
         struct TestInjectable;
@@ -178,11 +161,13 @@ mod tests {
         }
 
         let mut ctx = get_empty_ctx();
-        let resolved = Module::new().client::<TestInjectable>().build(&mut ctx);
+        let resolved = Module::new()
+            .client::<TestInjectable>()
+            .build(&mut ctx);
+
         assert_eq!(resolved.clients.len(), 1);
     }
 
-    #[test]
     fn test_imported_provider_is_reachable() {
         #[derive(Clone, Injectable)]
         struct TestInjectable;
@@ -197,7 +182,10 @@ mod tests {
         }
 
         let mut ctx = get_empty_ctx();
-        let resolved = Module::new().import::<ExportingModule>().build(&mut ctx);
+        let resolved = Module::new()
+            .import::<ExportingModule>()
+            .build(&mut ctx);
+
         assert_eq!(resolved.imports.len(), 1);
 
         assert!(resolved.imports[0]

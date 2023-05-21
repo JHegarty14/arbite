@@ -1,4 +1,4 @@
-use crate::graph::Graph;
+use crate::di::Graph;
 use crate::instrumentation::InstrumentationOpts;
 use crate::sept_module::{ApplicationContext, ModuleFactory, ResolvedModule};
 use actix_tls::accept::rustls::reexports::ServerConfig;

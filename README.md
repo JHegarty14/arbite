@@ -18,6 +18,7 @@ sept is heavily inspired by NestJS and the iDesign methodology for architecting 
 
 ### Roadmap
 
+- [ ] asynchronous producers
 - [ ] route/controller/module level interceptors
 - [ ] route/client/module level guards
 - [ ] exception filters

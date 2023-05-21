@@ -4,9 +4,12 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, ToTokens};
 use syn::{parse_macro_input, DeriveInput, Ident, ItemImpl, ItemStruct};
 mod args;
+mod client;
+mod error;
 mod injected;
 mod module;
 mod route;
+use crate::error::handle_error;
 use crate::injected::InjectedBody;
 use crate::module::ModuleArgs;
 use crate::route::MethodType;
@@ -94,26 +97,26 @@ pub fn injectable(input: TokenStream) -> TokenStream {
 
     let name = &ast.ident;
     let graph_ident = Ident::new("graph", Span::call_site());
-    let context_ident = Ident::new("ctx", Span::call_site());
+    let ctx_ident = Ident::new("ctx", Span::call_site());
     let fields = match &ast.data {
-        syn::Data::Struct(st) => match InjectedBody::new(&graph_ident, &context_ident, st) {
+        syn::Data::Struct(s) => match InjectedBody::new(&graph_ident, &ctx_ident, s) {
             Ok(fields) => Ok(fields),
             err => err,
         },
         _ => Err(syn::Error::new_spanned(
             &ast,
-            "Can only be applied to structs",
+            "macro may only be applied to structs",
         )),
     };
     match fields {
         Ok(f) => {
             let expanded = quote! {
                 #[automatically_derived]
-                impl sept::graph::Injected for #name {
+                impl sept::di::Injected for #name {
                     type Output = Self;
                     fn resolve(
-                        #graph_ident: &mut sept::graph::Graph,
-                        #context_ident: &[&sept::graph::Graph]
+                        #graph_ident: &mut sept::di::Graph,
+                        #ctx_ident: &[&sept::di::Graph]
                     ) -> Self {
                         Self {
                             #f
@@ -245,68 +248,73 @@ impl ToTokens for Method {
 }
 
 #[proc_macro_attribute]
-pub fn client(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let parsed = parse_macro_input!(attr as syn::AttributeArgs);
-    let mut input = parse_macro_input!(item as ItemImpl);
-    let mut handlers = Vec::new();
-    for item in &mut input.items {
-        if let syn::ImplItem::Method(ref mut item_method) = item {
-            match Method::new(item_method) {
-                Ok(Some(method)) => {
-                    handlers.push(method);
-                }
-                Ok(None) => {}
-                Err(err) => {
-                    return err.to_compile_error().into();
-                }
-            }
-        }
-    }
-
-    match args::Args::new(parsed) {
-        Ok(args::Args {
-            path,
-            methods,
-            wrappers,
-        }) => {
-            let route_idents: Vec<&syn::Ident> = handlers.iter().map(|x| &x.name).collect();
-            let name = &input.self_ty;
-
-            let expanded = quote! {
-                #input
-                impl #name {
-                    #(#handlers)*
-                }
-
-                #[automatically_derived]
-                impl actix_web::FromRequest for #name {
-                    type Error = actix_web::Error;
-                    type Future = futures_util::future::Ready<Result<Self, Self::Error>>;
-
-                    #[inline]
-                    fn from_request(req: &actix_web::HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
-                        match req.app_data::<actix_web::web::Data<#name>>() {
-                            Some(st) => futures_util::future::ok(st.get_ref().clone()),
-                            None => panic!("Failed to extract data class."),
-                        }
-                    }
-                }
-
-                #[automatically_derived]
-                impl sept::sept_module::ServiceFactory for #name {
-                    fn register(&self, app: &mut actix_web::web::ServiceConfig) {
-                        app.service(
-                            actix_web::web::scope(#path)
-                            .app_data(actix_web::web::Data::new(self.clone()))
-                            #(.guard(actix_web::guard::fn_guard(#methods)))*
-                            #(.wrap(#wrappers))*
-                            #(.service(Self::#route_idents(&self)))*
-                        );
-                    }
-                }
-            };
-            TokenStream::from(expanded)
-        }
-        Err(err) => err.to_compile_error().into(),
-    }
+pub fn client(attr: TokenStream, input: TokenStream) -> TokenStream {
+    handle_error(|| client::handle_client_attribute(attr.into(), input.into()))
 }
+
+// #[proc_macro_attribute]
+// pub fn client(attr: TokenStream, item: TokenStream) -> TokenStream {
+//     let parsed = parse_macro_input!(attr as syn::AttributeArgs);
+//     let mut input = parse_macro_input!(item as ItemImpl);
+//     let mut handlers = Vec::new();
+//     for item in &mut input.items {
+//         if let syn::ImplItem::Method(ref mut item_method) = item {
+//             match Method::new(item_method) {
+//                 Ok(Some(method)) => {
+//                     handlers.push(method);
+//                 }
+//                 Ok(None) => {}
+//                 Err(err) => {
+//                     return err.to_compile_error().into();
+//                 }
+//             }
+//         }
+//     }
+
+//     match args::Args::new(parsed) {
+//         Ok(args::Args {
+//             path,
+//             methods,
+//             wrappers,
+//         }) => {
+//             let route_idents: Vec<&syn::Ident> = handlers.iter().map(|x| &x.name).collect();
+//             let name = &input.self_ty;
+
+//             let expanded = quote! {
+//                 #input
+//                 impl #name {
+//                     #(#handlers)*
+//                 }
+
+//                 #[automatically_derived]
+//                 impl actix_web::FromRequest for #name {
+//                     type Error = actix_web::Error;
+//                     type Future = futures_util::future::Ready<Result<Self, Self::Error>>;
+
+//                     #[inline]
+//                     fn from_request(req: &actix_web::HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+//                         match req.app_data::<actix_web::web::Data<#name>>() {
+//                             Some(st) => futures_util::future::ok(st.get_ref().clone()),
+//                             None => panic!("Failed to extract data class."),
+//                         }
+//                     }
+//                 }
+
+//                 #[automatically_derived]
+//                 impl sept::sept_module::ServiceFactory for #name {
+//                     fn register(&self, app: &mut actix_web::web::ServiceConfig) {
+//                         app.service(
+//                             actix_web::web::scope(#path)
+//                             .app_data(actix_web::web::Data::new(self.clone()))
+//                             #(.guard(actix_web::guard::fn_guard(#methods)))*
+//                             #(.wrap(#wrappers))*
+//                             #(.service(Self::#route_idents(&self)))*
+//                         );
+//                     }
+//                 }
+//             };
+//             TokenStream::from(expanded)
+//         }
+//         Err(err) => err.to_compile_error().into(),
+//     }
+// }

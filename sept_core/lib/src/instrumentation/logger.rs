@@ -1,4 +1,4 @@
-use crate::graph::Graph;
+use crate::di::Graph;
 
 use super::{InstrumentationProvider, LogLevel};
 use futures_util::future::{ok, Ready};
@@ -54,9 +54,9 @@ impl Logger {
     }
 }
 
-impl crate::graph::Injected for Logger {
+impl crate::di::Injected for Logger {
     type Output = Self;
-    fn resolve(_: &mut crate::graph::Graph, _: &[&Graph]) -> Self {
+    fn resolve<'a>(_: &'a mut crate::di::Graph, _: &[&Graph]) -> Self {
         panic!("Logger not configured in application!")
     }
 }

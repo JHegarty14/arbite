@@ -15,7 +15,7 @@ impl<'a> ToTokens for InjectedBody<'a> {
             let out = quote! {
                 #ident: #graph_ident
                     .get_node::<#ty>()
-                    .or_else(|| sept::graph::Graph::search_all(#imported_graph_ident))
+                    .or_else(|| sept::di::Graph::search_all(#imported_graph_ident))
                     .unwrap()
                     .to_owned(),
             };

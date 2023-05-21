@@ -1,2 +1,2 @@
 [workspace]
-members = ["sept_core/lib/", "sept_core/codegen"]
+members = ["sept_core/lib/", "sept_core/codegen/"]

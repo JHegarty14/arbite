@@ -1,4 +1,5 @@
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::quote;
 use std::collections::HashMap;
 use syn::Meta;
 
@@ -66,5 +67,12 @@ impl ModuleArgs {
             exports,
             providers,
         })
+    }
+}
+
+
+pub fn handle_module_attribute(_: TokenStream, item: TokenStream) -> TokenStream {
+    quote! {
+        #item
     }
 }
