@@ -1,6 +1,7 @@
 use crate::graph::Graph;
 use crate::instrumentation::InstrumentationOpts;
 use crate::sept_module::{ApplicationContext, ModuleFactory, ResolvedModule};
+use actix_cors::Cors;
 use actix_tls::accept::rustls::reexports::ServerConfig;
 use actix_web::web::ServiceConfig;
 use actix_web::{App as ActixApp, HttpServer};
@@ -29,8 +30,19 @@ impl SeptConfig {
     }
 }
 
+#[derive(Clone)]
+pub struct CorsConfig {
+    pub allowed_origin: String,
+    pub allowed_methods: Vec<actix_http::Method>,
+    pub allowed_headers: Vec<actix_http::header::HeaderName>,
+    pub allow_credentials: bool,
+    pub max_age: Option<usize>,
+    pub expose_headers: Vec<String>,
+}
+
 pub struct SeptApplication {
     app_config: SeptConfig,
+    cors: CorsConfig,
     instrumentation: Option<InstrumentationOpts>,
 }
 
@@ -39,6 +51,7 @@ impl SeptApplication {
     pub fn new(app_config: SeptConfig) -> Self {
         Self {
             app_config,
+            cors: CorsConfig::default(),
             instrumentation: None,
         }
     }
@@ -64,12 +77,25 @@ impl SeptApplication {
         self
     }
 
+    pub fn with_cors(mut self, cors_opts: CorsConfig) -> Self {
+        self.cors = cors_opts;
+        self
+    }
+
     pub async fn init<T: ModuleFactory>(mut self) -> io::Result<()> {
         let mut fd = ListenFd::from_env();
         let mut ctx: ApplicationContext = self.app_config.register_globals();
         let module = Arc::new(T::get_module().build(&mut ctx));
         let mut server = HttpServer::new(move || {
-            ActixApp::new().configure(|cfg| Self::configure(module.clone(), cfg))
+            let cors_config = self.cors.clone();
+            let cors = Cors::default()
+                .allowed_origin(&cors_config.allowed_origin)
+                .allowed_methods(cors_config.allowed_methods)
+                .allowed_headers(cors_config.allowed_headers)
+                .expose_headers(cors_config.expose_headers)
+                .max_age(cors_config.max_age);
+
+            ActixApp::new().wrap(cors).configure(|cfg| Self::configure(module.clone(), cfg))
         });
 
         if cfg!(feature = "rustls") && self.app_config.tls_config.is_some() {
@@ -96,5 +122,22 @@ impl SeptApplication {
 impl Default for SeptApplication {
     fn default() -> Self {
         Self::new(SeptConfig::new())
+    }
+}
+
+impl Default for CorsConfig {
+    fn default() -> CorsConfig {
+        CorsConfig {
+            allowed_origin: "http://localhost:3000".to_string(),
+            allowed_methods: vec![actix_http::Method::GET, actix_http::Method::POST, actix_http::Method::PUT, actix_http::Method::DELETE],
+            allowed_headers: vec![
+                actix_web::http::header::AUTHORIZATION,
+                actix_web::http::header::ACCEPT,
+                actix_web::http::header::CONTENT_TYPE,
+            ],
+            allow_credentials: true,
+            max_age: None,
+            expose_headers: vec![],
+        }
     }
 }
