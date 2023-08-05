@@ -141,3 +141,41 @@ impl Default for CorsConfig {
         }
     }
 }
+
+
+impl CorsConfig {
+    pub fn allow_origin(mut self, origin: &str) -> Self {
+        self.allowed_origin = origin.to_string();
+        self
+    }
+
+    pub fn allow_methods(mut self, methods: Vec<actix_http::Method>) -> Self {
+        self.allowed_methods = methods;
+        self
+    }
+
+    pub fn allow_headers(mut self, headers: Vec<actix_http::header::HeaderName>) -> Self {
+        self.allowed_headers = headers;
+        self
+    }
+
+    pub fn allow_credentials(mut self, allow: bool) -> Self {
+        self.allow_credentials = allow;
+        self
+    }
+
+    pub fn max_age(mut self, age: usize) -> Self {
+        self.max_age = Some(age);
+        self
+    }
+
+    pub fn expose_headers(mut self, headers: Vec<String>) -> Self {
+        self.expose_headers = headers;
+        self
+    }
+
+    pub fn allow_method(mut self, method: actix_http::Method) -> Self {
+        self.allowed_methods.push(method);
+        self
+    }
+}

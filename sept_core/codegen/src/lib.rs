@@ -4,9 +4,11 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, ToTokens};
 use syn::{parse_macro_input, DeriveInput, Ident, ItemImpl, ItemStruct};
 mod args;
+mod client;
 mod injected;
 mod module;
 mod route;
+use crate::client::ClientArgs;
 use crate::injected::InjectedBody;
 use crate::module::ModuleArgs;
 use crate::route::MethodType;
@@ -262,6 +264,15 @@ pub fn client(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     }
+
+    let interceptors = match ClientArgs::parse_and_strip(&mut input.attrs) {
+        Ok(ClientArgs {
+            interceptors
+        }) => interceptors,
+        Err(err) => {
+            return err.to_compile_error().into();
+        }
+    };
 
     match args::Args::new(parsed) {
         Ok(args::Args {
